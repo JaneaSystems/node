@@ -153,8 +153,13 @@ struct PlainHashReader {
 /*
  *  Likely and unlikely macros.
  */
-#define _likely_(x) __builtin_expect(x, 1)
-#define _unlikely_(x) __builtin_expect(x, 0)
+#if defined(_MSC_VER) // If compiling with MSVC
+  #define _likely_(x) (x)
+  #define _unlikely_(x) (x)
+#else
+  #define _likely_(x) __builtin_expect(x, 1)
+  #define _unlikely_(x) __builtin_expect(x, 0)
+#endif
 
 /*
  *  Default seed.
