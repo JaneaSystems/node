@@ -715,35 +715,34 @@
             'Ws2_32.lib',
           ],
         }],
+        # Thin LTO for node_main.cc and linker (scoped to node_exe)
         ['node_with_ltcg=="true"', {
           'msvs_settings': {
             'VCCLCompilerTool': {
-              'WholeProgramOptimization': 'true'   # /GL, whole program optimization, needed for LTCG
+              'AdditionalOptions': ['-flto=thin'],
             },
-            'VCLibrarianTool': {
-              'AdditionalOptions': [
-                '/LTCG:INCREMENTAL',               # link time code generation
-              ],
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-flto=thin'],
             },
+          },
+        }],
+        # Whole-program optimization: either Thin LTO or PGO
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true" or enable_pgo_generate=="true" or enable_pgo_use=="true"', {
+          'msvs_settings': {
             'VCLinkerTool': {
               'OptimizeReferences': 2,             # /OPT:REF
               'EnableCOMDATFolding': 2,            # /OPT:ICF
               'LinkIncremental': 1,                # disable incremental linking
-              'AdditionalOptions': [
-                '/LTCG:INCREMENTAL',               # incremental link-time code generation
-              ],
-            }
-          }
-        }, {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'WholeProgramOptimization': 'false'
-            },
-            'VCLinkerTool': {
-              'LinkIncremental': 2                 # enable incremental linking
             },
           },
-         }],
+        }, {
+          # No whole-program optimization
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'LinkIncremental': 2,                # enable incremental linking
+            },
+          },
+        }],
          ['node_use_node_snapshot=="true"', {
           'dependencies': [
             'node_mksnapshot',
@@ -1100,6 +1099,17 @@
         [ 'debug_nghttp2==1', {
           'defines': [ 'NODE_DEBUG_NGHTTP2=1' ]
         }],
+        # Thin LTO for node sources (scoped to libnode, not global)
+        ['node_with_ltcg=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-flto=thin'],
+            },
+            'VCLibrarianTool': {
+              'AdditionalOptions': ['-flto=thin'],
+            },
+          },
+        }],
       ],
       'actions': [
         {
@@ -1400,6 +1410,16 @@
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
         }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
+        }],
       ],
     }, # cctest
 
@@ -1463,6 +1483,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ],
     }, # embedtest
@@ -1540,6 +1570,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ]
     }, # overlapped-checker
@@ -1666,6 +1706,16 @@
         # Avoid excessive LTO
         ['enable_lto=="true"', {
           'ldflags': [ '-fno-lto' ],
+        }],
+        ['node_with_ltcg=="true" or enable_lto=="true" or enable_thin_lto=="true"', {
+          'msvs_settings': {
+            'VCCLCompilerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+            'VCLinkerTool': {
+              'AdditionalOptions': ['-fno-lto'],
+            },
+          },
         }],
       ],
     }, # node_mksnapshot
