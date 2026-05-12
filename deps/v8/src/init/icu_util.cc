@@ -20,6 +20,7 @@
 
 #define ICU_UTIL_DATA_FILE 0
 #define ICU_UTIL_DATA_STATIC 1
+#define ICU_UTIL_DATA_SHARED 2
 
 #endif
 
@@ -66,6 +67,9 @@ bool InitializeICU(const char* icu_data_file) {
 #if ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_STATIC
   // Use bundled ICU data.
   return true;
+#elif ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_SHARED
+  // ICU data is available from a shared or static library.
+  return true;
 #elif ICU_UTIL_DATA_IMPL == ICU_UTIL_DATA_FILE
   if (!icu_data_file) return false;
 
@@ -105,6 +109,7 @@ bool InitializeICU(const char* icu_data_file) {
 
 #undef ICU_UTIL_DATA_FILE
 #undef ICU_UTIL_DATA_STATIC
+#undef ICU_UTIL_DATA_SHARED
 
 }  // namespace internal
 }  // namespace v8

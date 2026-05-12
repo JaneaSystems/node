@@ -295,6 +295,15 @@
       'target_name': 'v8_initializers',
       'type': 'static_library',
       'toolsets': ['host', 'target'],
+      # 'configurations': {
+      #   'Debug': {
+      #     'msvs_settings': {
+      #       'VCCLCompilerTool': {
+      #         'MultiProcessorCompilation': 'false',
+      #       },
+      #     },
+      #   },
+      # },
       'dependencies': [
         'torque_generated_initializers',
         'v8_base_without_compiler',
@@ -918,6 +927,15 @@
       'target_name': 'v8_compiler_for_mksnapshot_source_set',
       'type': 'static_library',
       'toolsets': ['host', 'target'],
+      # 'configurations': {
+      #   'Debug': {
+      #     'msvs_settings': {
+      #       'VCCLCompilerTool': {
+      #         'MultiProcessorCompilation': 'false',
+      #       },
+      #     },
+      #   },
+      # },
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',
@@ -940,6 +958,19 @@
       'target_name': 'v8_compiler',
       'type': 'static_library',
       'toolsets': ['host', 'target'],
+      # 'configurations': {
+      #   'Debug': {
+      #     'msvs_settings': {
+      #       'VCCLCompilerTool': {
+      #         # The ABI-heavy Turboshaft files can use several GB of RAM each
+      #         # when compiled with Clang in debug mode.  Compiling them all
+      #         # in parallel (/MP, the default inherited from common.gypi) can
+      #         # exceed available memory and cause the build to fail.
+      #         'MultiProcessorCompilation': 'false',
+      #       },
+      #     },
+      #   },
+      # },
       'dependencies': [
         'generate_bytecode_builtins_list',
         'run_torque',

@@ -18,6 +18,7 @@
 #include "src/logging/counters-scopes.h"
 #include "src/logging/runtime-call-stats-scope.h"
 #include "src/objects/js-regexp-inl.h"
+#include "src/objects/templates-inl.h"
 #include "src/snapshot/context-deserializer.h"
 #include "src/snapshot/context-serializer.h"
 #include "src/snapshot/read-only-serializer.h"
@@ -250,6 +251,13 @@ void Snapshot::ClearReconstructableDataForSerialization(
                   ->DiscardCompiledCodeForSerialization();
             }
           }
+        } else if (IsFunctionTemplateRareData(o, cage_base)) {
+          // Clear c_function_overloads which contain Managed<Foreign>
+          // objects that cannot be serialized.
+          i::Tagged<i::FunctionTemplateRareData> rare_data =
+              i::Cast<i::FunctionTemplateRareData>(o);
+          rare_data->set_c_function_overloads(
+              ReadOnlyRoots(isolate).empty_fixed_array());
         }
       }
     }
