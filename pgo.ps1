@@ -295,9 +295,6 @@ Write-Host "`n=== STEP 4: Build optimised binary (pgo-use) ===" -ForegroundColor
 
 # vcbuild / common.gypi expect node.profdata in the workspace root (same dir as node.gyp)
 # – it's already there from the merge step above.
-
-git clean -fdx *> $null
-
 # Preserve node.profdata across git clean by staging it
 git add node.profdata
 
