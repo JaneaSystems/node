@@ -19,7 +19,8 @@ param(
     [ValidateSet('', 'ltcg', 'thin-lto', 'lto')]
     [string]$Lto = '',
     [switch]$PhaseOnly,
-    [int]$Duration = 15
+    [int]$Duration = 15,
+    [hashtable]$Weights = @{}
 )
 
 Set-StrictMode -Version Latest
@@ -262,7 +263,6 @@ if ($skipProfileCollection) {
     }
 
     # Build the merge command. llvm-profdata accepts a list of inputs or a wildcard via response file.
-    $scriptWeights = [ordered]@{}
     $groups = @{}
 
     foreach ($file in $profrawFiles) {
@@ -281,7 +281,8 @@ if ($skipProfileCollection) {
     Write-Host "Profile groups (weighted merge):"
 
     foreach ($key in ($groups.Keys | Sort-Object)) {
-        Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, 1)     
+        $w = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+        Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, $w)     
     }
 
     $maxCount = ($groups.Values | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
@@ -289,8 +290,8 @@ if ($skipProfileCollection) {
     $mergeArgs = [System.Collections.Generic.List[string]]@("merge", "--output=$profdata")
 
     foreach ($key in $groups.Keys) {
-        $groupWeight = if ($scriptWeights.Contains($key)) { $maxCount } else { $maxCount }
-        $perFileWeight = $groupWeight / $groups[$key].Count
+        $groupWeight = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+        $perFileWeight = $groupWeight * $maxCount / $groups[$key].Count
         foreach ($file in $groups[$key]) {
             $mergeArgs.Add("--weighted-input=$perFileWeight,$file")
         }
