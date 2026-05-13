@@ -138,12 +138,17 @@ Example:
   return args;
 }
 
-function runScript(scriptPath, duration, verbose) {
+function runScript(scriptPath, duration, verbose, scriptName) {
   return new Promise((resolve, reject) => {
     const env = {
       ...process.env,
       PGO_TRAINING_DURATION: String(duration * 1000),
     };
+    const profileFile = process.env.LLVM_PROFILE_FILE
+    if (profileFile) {
+      const dir = path.dirname(profileFile)
+      env.LLVM_PROFILE_FILE = path.join(dir, `node-${scriptName}-%p-%m.profraw`)
+    }
     const child = fork(scriptPath, [], {
       stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe', 'ipc'],
       env,
@@ -243,7 +248,7 @@ async function main() {
     console.log(`    ${script.desc}`);
 
     const scriptStart = Date.now();
-    const result = await runScript(scriptPath, args.duration, args.verbose);
+    const result = await runScript(scriptPath, args.duration, args.verbose, script.name);
     const elapsed = ((Date.now() - scriptStart) / 1000).toFixed(1);
 
     const status = result.code === 0 ? 'OK' : `FAIL(${result.code})`;
