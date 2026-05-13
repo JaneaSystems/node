@@ -262,7 +262,8 @@ if ($skipProfileCollection) {
         Write-Host "Found $($profrawFiles.Count) .profraw file(s) to merge."
     }
 
-    # Build the merge command. llvm-profdata accepts a list of inputs or a wildcard via response file.
+    # Building the merge command, groupping profraw files by pgo JS script names.
+    # llvm-profdata accepts a list of inputs or a wildcard via response file.
     $groups = @{}
 
     foreach ($file in $profrawFiles) {
@@ -285,6 +286,7 @@ if ($skipProfileCollection) {
         Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, $w)     
     }
 
+    # llvm-profdata supports only integer values for weights
     $maxCount = ($groups.Values | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
 
     $mergeArgs = [System.Collections.Generic.List[string]]@("merge", "--output=$profdata")

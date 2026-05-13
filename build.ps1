@@ -79,7 +79,8 @@ function Build-WithPgo {
         [string]$Arch = '',
         [Parameter(Mandatory = $true)]
         [string]$OutputName,
-        [int]$Duration = 15
+        [int]$Duration = 15,
+        [hashtable]$Weights = @{}
     )
 
     # Step 1: Build instrumented binary
@@ -95,7 +96,7 @@ function Build-WithPgo {
     Copy-NodeExecutable -DestinationFileName $genName
 
     # Step 2: Collect profiles + merge
-    .\pgo.ps1 -PgoGenNode .\Release\node.exe -PhaseOnly -Duration $Duration
+    .\pgo.ps1 -PgoGenNode .\Release\node.exe -PhaseOnly -Duration $Duration -Weights $Weights
     $profdataName = $OutputName -replace '\.exe$', '.profdata'
     $destinationDir = Split-Path -Path $PSScriptRoot -Parent
     Copy-Item -Path (Join-Path $PSScriptRoot 'node.profdata') -Destination (Join-Path $destinationDir $profdataName) -Force
@@ -128,6 +129,7 @@ Build-WithLto -Lto lto -OutputName "node_lto.exe"
 Build-WithLto -Lto ltcg -Arch arm64 -OutputName "node_branch_ltcg_arm64.exe"
 Build-WithLto -Lto thin-lto -Arch arm64 -OutputName "node_thin_lto_arm64.exe"
 Build-WithLto -Lto lto -Arch arm64 -OutputName "node_lto_arm64.exe"
+
 # PGO builds
 Build-WithPgo -OutputName "node_pgo.exe"
 Build-WithPgo -Lto ltcg -OutputName "node_ltcg_pgo.exe"
@@ -136,3 +138,25 @@ Build-WithPgo -Lto lto -OutputName "node_lto_pgo.exe"
 Build-WithPgo -Lto ltcg -Arch arm64 -OutputName "node_ltcg_pgo_arm64.exe"
 Build-WithPgo -Lto thin-lto -Arch arm64 -OutputName "node_thin_lto_pgo_arm64.exe"
 Build-WithPgo -Lto lto -Arch arm64 -OutputName "node_lto_pgo_arm64.exe"
+
+# PGO builds with weights
+$pgoWeights = @{
+    'http-server'     = 30
+    'json'            = 20
+    'crypto'          = 12
+    'streams-buffers' = 10
+    'fs'              = 6
+    'async-patterns'  = 5
+    'url-string'      = 8
+    'compression'     = 5
+    'net'             = 3
+    'module-loading'  = 1
+    'child-workers'   = 1
+}
+Build-WithPgo -OutputName "node_pgo_weights.exe" -Weights $pgoWeights
+Build-WithPgo -Lto ltcg -OutputName "node_ltcg_pgo_weights.exe" -Weights $pgoWeights
+Build-WithPgo -Lto thin-lto -OutputName "node_thin_lto_pgo_weights.exe" -Weights $pgoWeights
+Build-WithPgo -Lto lto -OutputName "node_lto_pgo.exe" -Weights $pgoWeights
+Build-WithPgo -Lto ltcg -Arch arm64 -OutputName "node_ltcg_pgo_arm64.exe" -Weights $pgoWeights
+Build-WithPgo -Lto thin-lto -Arch arm64 -OutputName "node_thin_lto_pgo_arm64.exe" -Weights $pgoWeights
+Build-WithPgo -Lto lto -Arch arm64 -OutputName "node_lto_pgo_arm64.exe" -Weights $pgoWeights
