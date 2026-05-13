@@ -262,43 +262,46 @@ if ($skipProfileCollection) {
         Write-Host "Found $($profrawFiles.Count) .profraw file(s) to merge."
     }
 
-    # Building the merge command, groupping profraw files by pgo JS script names.
+    # Building the merge command, groupping profraw files by pgo JS script names if weights are provided.
     # llvm-profdata accepts a list of inputs or a wildcard via response file.
-    $groups = @{}
+    if ($Weights.Count -eq 0) {
+        $mergeArgs = @("merge", "--output=$profdata") + ($profrawFiles | Select-Object -ExpandProperty FullName)
+    } else {
+        $groups = @{}
 
-    foreach ($file in $profrawFiles) {
-        $parts = $file.BaseName -split '-'
-        $key = if ($parts.Count -ge 4) {
-            $parts[1..($parts.Count - 3)] -join '-'
-        } else {
-            '__orchestrator__'
+        foreach ($file in $profrawFiles) {
+            $parts = $file.BaseName -split '-'
+            $key = if ($parts.Count -ge 4) {
+                $parts[1..($parts.Count - 3)] -join '-'
+            } else {
+                '__orchestrator__'
+            }
+            if (-not $groups.ContainsKey($key)) {
+                $groups[$key] = [System.Collections.Generic.List[string]]::new()
+            }
+            $groups[$key].Add($file.FullName)
         }
-        if (-not $groups.ContainsKey($key)) {
-            $groups[$key] = [System.Collections.Generic.List[string]]::new()
+
+        Write-Host "Profile groups (weighted merge):"
+
+        foreach ($key in ($groups.Keys | Sort-Object)) {
+            $w = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+            Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, $w)     
         }
-        $groups[$key].Add($file.FullName)
-    }
 
-    Write-Host "Profile groups (weighted merge):"
+        # llvm-profdata supports only integer values for weights
+        $maxCount = ($groups.Values | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
 
-    foreach ($key in ($groups.Keys | Sort-Object)) {
-        $w = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
-        Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, $w)     
-    }
+        $mergeArgs = [System.Collections.Generic.List[string]]@("merge", "--output=$profdata")
 
-    # llvm-profdata supports only integer values for weights
-    $maxCount = ($groups.Values | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
-
-    $mergeArgs = [System.Collections.Generic.List[string]]@("merge", "--output=$profdata")
-
-    foreach ($key in $groups.Keys) {
-        $groupWeight = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
-        $perFileWeight = $groupWeight * $maxCount / $groups[$key].Count
-        foreach ($file in $groups[$key]) {
-            $mergeArgs.Add("--weighted-input=$perFileWeight,$file")
+        foreach ($key in $groups.Keys) {
+            $groupWeight = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+            $perFileWeight = $groupWeight * $maxCount / $groups[$key].Count
+            foreach ($file in $groups[$key]) {
+                $mergeArgs.Add("--weighted-input=$perFileWeight,$file")
+            }
         }
     }
-
     Write-Host "Merging: $llvmProfdata $($mergeArgs -join ' ')"
 
     $mergeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
