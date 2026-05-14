@@ -19,7 +19,8 @@ param(
     [ValidateSet('', 'ltcg', 'thin-lto', 'lto')]
     [string]$Lto = '',
     [switch]$PhaseOnly,
-    [int]$Duration = 15
+    [int]$Duration = 15,
+    [hashtable]$Weights = @{}
 )
 
 Set-StrictMode -Version Latest
@@ -261,8 +262,46 @@ if ($skipProfileCollection) {
         Write-Host "Found $($profrawFiles.Count) .profraw file(s) to merge."
     }
 
-    # Build the merge command. llvm-profdata accepts a list of inputs or a wildcard via response file.
-    $mergeArgs = @("merge", "--output=$profdata") + ($profrawFiles | Select-Object -ExpandProperty FullName)
+    # Building the merge command, groupping profraw files by pgo JS script names if weights are provided.
+    # llvm-profdata accepts a list of inputs or a wildcard via response file.
+    if ($Weights.Count -eq 0) {
+        $mergeArgs = @("merge", "--output=$profdata") + ($profrawFiles | Select-Object -ExpandProperty FullName)
+    } else {
+        $groups = @{}
+
+        foreach ($file in $profrawFiles) {
+            $parts = $file.BaseName -split '-'
+            $key = if ($parts.Count -ge 4) {
+                $parts[1..($parts.Count - 3)] -join '-'
+            } else {
+                '__orchestrator__'
+            }
+            if (-not $groups.ContainsKey($key)) {
+                $groups[$key] = [System.Collections.Generic.List[string]]::new()
+            }
+            $groups[$key].Add($file.FullName)
+        }
+
+        Write-Host "Profile groups (weighted merge):"
+
+        foreach ($key in ($groups.Keys | Sort-Object)) {
+            $w = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+            Write-Host ("  {0,-22} {1,4} file(s)   group weight {2}" -f $key, $groups[$key].Count, $w)     
+        }
+
+        # llvm-profdata supports only integer values for weights
+        $maxCount = ($groups.Values | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
+
+        $mergeArgs = [System.Collections.Generic.List[string]]@("merge", "--output=$profdata")
+
+        foreach ($key in $groups.Keys) {
+            $groupWeight = if ($Weights.ContainsKey($key)) { $Weights[$key] } else { 1 }
+            $perFileWeight = $groupWeight * $maxCount / $groups[$key].Count
+            foreach ($file in $groups[$key]) {
+                $mergeArgs.Add("--weighted-input=$perFileWeight,$file")
+            }
+        }
+    }
     Write-Host "Merging: $llvmProfdata $($mergeArgs -join ' ')"
 
     $mergeStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -295,9 +334,6 @@ Write-Host "`n=== STEP 4: Build optimised binary (pgo-use) ===" -ForegroundColor
 
 # vcbuild / common.gypi expect node.profdata in the workspace root (same dir as node.gyp)
 # – it's already there from the merge step above.
-
-git clean -fdx *> $null
-
 # Preserve node.profdata across git clean by staging it
 git add node.profdata
 
