@@ -199,8 +199,8 @@ if defined build_release (
   set projgen=1
   set cctest=1
   set thin_lto=1
-  @REM Parallel LTO link jobs can cause OOM issues, so we limit it to 2 by default for release builds in the release CI.
-  set lto_jobs=2
+  @REM Parallel LTO link jobs can cause OOM issues, so we limit it to 1 by default for release builds in the release CI.
+  set lto_jobs=1
 )
 
 :: LTO mutual exclusion
