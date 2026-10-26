@@ -1,0 +1,152 @@
+name: Windows ARM64 PGO
+
+on:
+  workflow_dispatch:
+    inputs:
+      committer_name:
+        description: Your full name for the commit and DCO sign-off
+        required: true
+        type: string
+      committer_email:
+        description: Your email for the commit and DCO sign-off
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.13'
+  RUSTC_VERSION: '1.88'
+
+jobs:
+  build:
+    if: github.repository == 'JaneaSystems/node'
+    runs-on: windows-2025
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Rust for ARM64 cross-compilation
+        shell: cmd
+        run: |
+          rustup override set %RUSTC_VERSION%
+          if errorlevel 1 exit /b 1
+          rustup target add aarch64-pc-windows-msvc
+      - name: Build the instrumented ARM64 release
+        shell: cmd
+        run: |
+          if not "%PROCESSOR_ARCHITECTURE%"=="AMD64" exit /b 1
+          call vcbuild.bat build-release arm64 pgo-generate nosign
+          if errorlevel 1 exit /b 1
+          if not exist Release\node.exe exit /b 1
+          echo LLVM_BIN=%VCINSTALLDIR%\Tools\Llvm\x64\bin>>"%GITHUB_ENV%"
+      - name: Stage the binary and matching profile tool
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path pgo-artifact/Release -Force | Out-Null
+          Copy-Item Release/node.exe pgo-artifact/Release/
+          Copy-Item "$env:LLVM_BIN/llvm-profdata.exe" pgo-artifact/
+          Get-ChildItem $env:LLVM_BIN -Filter '*.dll' | Copy-Item -Destination pgo-artifact/
+      - name: Upload the instrumented build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: node-pgo-windows-arm64
+          path: pgo-artifact/
+          if-no-files-found: error
+          retention-days: 7
+
+  train:
+    needs: build
+    runs-on: windows-11-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+      - name: Download the instrumented build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: node-pgo-windows-arm64
+      - name: Generate the ARM64 profile
+        shell: pwsh
+        env:
+          LLVM_PROFDATA: ${{ github.workspace }}\llvm-profdata.exe
+          LLVM_PROFILE_FILE: ${{ runner.temp }}\node-check-%p.profraw
+        run: |
+          if ($env:RUNNER_ARCH -ne 'ARM64') {
+            throw 'PGO training requires a Windows ARM64 runner.'
+          }
+          .\Release\node.exe -e "require('node:assert/strict').equal(process.arch, 'arm64')"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools\pgo\pgo.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Item node.profdata).Length -eq 0) {
+            throw 'The generated profile is empty.'
+          }
+      - name: Upload the profile
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: profdata-windows-arm64
+          path: node.profdata
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: train
+    if: github.repository == 'JaneaSystems/node'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: JaneaSystems/node
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download the profile into the repository
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: profdata-windows-arm64
+          path: tools/pgo/profdata/windows/arm64
+      - name: Commit and push the profile
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: ${{ inputs.committer_name }}
+          GIT_AUTHOR_EMAIL: ${{ inputs.committer_email }}
+          GIT_COMMITTER_NAME: ${{ inputs.committer_name }}
+          GIT_COMMITTER_EMAIL: ${{ inputs.committer_email }}
+        run: |
+          profile=tools/pgo/profdata/windows/arm64/node.profdata
+          test -s "$profile"
+          branch="pgo-windows-arm64-$(date -u +%Y-%m-%d)"
+          gh auth setup-git
+          existing_branch="$(git ls-remote --heads origin "refs/heads/$branch")"
+          if [[ -n "$existing_branch" ]]; then
+            echo "::error::Branch $branch already exists; refusing to overwrite it."
+            exit 1
+          fi
+          git switch --create "$branch"
+          git add --force -- "$profile"
+          git commit --signoff -m "win,build: add arm64 pgo profdata" \
+            --trailer "Assisted-by: GitHub Copilot"
+          git push origin "HEAD:refs/heads/$branch"
+          echo "Published branch: $branch" >> "$GITHUB_STEP_SUMMARY"
