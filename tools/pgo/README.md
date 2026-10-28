@@ -54,34 +54,46 @@ Clang installation.
 python tools\pgo\pgo.py --duration=30
 ```
 
-### GitHub Actions: Windows ARM64
+### GitHub Actions: Windows PGO
 
-The [Windows ARM64 PGO workflow](../../.github/workflows/pgo-windows-arm64.yml)
+The [Windows PGO workflow](../../.github/workflows/pgo-windows-arm64.yml)
 is manually dispatched and only runs in `JaneaSystems/node`. Once it is on the
-fork's default branch, open **Actions > Windows ARM64 PGO > Run workflow** and
-select the source branch to profile. Supply your full name and email for the
+fork's default branch, open **Actions > Windows PGO > Run workflow** and select
+the branch containing the workflow definition. Set `source_ref` to a full commit
+SHA, branch, or tag in the fork, and choose the target `architecture`: `arm64`
+(the default) or `x64`. The selected source commit does not need to contain this
+workflow file. Supply your full name and email for the
 commit identity and `Signed-off-by` trailer, attesting to the
 [Developer Certificate of Origin](https://developercertificate.org/).
 
 The workflow builds with
-`vcbuild.bat build-release arm64 pgo-generate nosign` on `windows-2025`, then
-transfers `Release/node.exe` and the matching `llvm-profdata` tool to
-`windows-11-arm`. The `nosign` option avoids the Azure Trusted Signing
-credentials otherwise required by `build-release`. Only the x64 profile merge
-tool runs under Windows emulation; the instrumented Node.js binary and training
-workloads run natively on ARM64. Every job checks out the same source commit.
+`vcbuild.bat build-release <architecture> pgo-generate nosign` on `windows-2025`.
+The `nosign` option avoids the Azure Trusted Signing credentials otherwise
+required by `build-release`. The source ref is resolved once at checkout, and
+every job uses that exact commit even if the source branch moves during the run.
+The selected revision must support the Windows PGO build command and contain
+`tools/pgo/pgo.py`; revisions predating that support cannot use this workflow.
+
+For ARM64, the workflow transfers `Release/node.exe` and the matching
+`llvm-profdata` tool to `windows-11-arm` for training. Only the x64 profile merge
+tool runs under Windows emulation; Node.js and the workloads run natively on
+ARM64. For x64, `pgo.py` runs directly after compilation in the same job on the
+same machine. The separate ARM64 training job and binary transfer are skipped.
 
 After `pgo.py` succeeds, the workflow places `node.profdata` in
-`tools/pgo/profdata/windows/arm64/` and pushes a new branch named
-`pgo-windows-arm64-YYYY-MM-DD`, using the UTC publication date. The commit subject
-is `win,build: add arm64 pgo profdata`, with your sign-off and an
-`Assisted-by: GitHub Copilot` trailer. An existing branch for that date causes the
-workflow to fail without overwriting it.
+`tools/pgo/profdata/windows/<architecture>/` and pushes a new branch named
+`pgo-windows-<architecture>-YYYY-MM-DD`, using the source commit's committer
+date converted to UTC. The generated commit is based on that source commit. The
+commit subject is `win,build: add <architecture> pgo profdata`, with your sign-off
+and an `Assisted-by: GitHub Copilot` trailer. Different source commits with the
+same architecture and UTC date share a branch name; an existing branch causes
+the workflow to fail without overwriting it.
 
 Only the publication job receives `contents: write`, using the fork's
 `GITHUB_TOKEN`; no personal access token is needed. Review the generated commit
-before using it in a contribution. The instrumented build and merged profile
-are also retained as workflow artifacts for seven days.
+before using it in a contribution. Profiles are retained as workflow artifacts
+for seven days. ARM64 runs also retain the instrumented build transferred to the
+training runner.
 
 ## Quick Start: Linux with GCC
 
