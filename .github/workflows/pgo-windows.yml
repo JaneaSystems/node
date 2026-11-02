@@ -39,7 +39,10 @@ env:
 jobs:
   build:
     if: github.repository == 'JaneaSystems/node'
-    runs-on: windows-2025
+    # windows-2022 comes with VS2022, windows-2025 comes with VS2026
+    # node.profdata from VS2026 is not compatible with VS2022, but vice versa is
+    # after moving to VS2026, the profdata can still be used with VS2022, but should be updated
+    runs-on: windows-2022
     timeout-minutes: 300
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
